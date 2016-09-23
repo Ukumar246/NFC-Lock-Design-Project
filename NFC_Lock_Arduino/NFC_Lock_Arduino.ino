@@ -1,100 +1,193 @@
-/**************************************************************************/
-/*!
-    This example attempts to dump the contents of a Mifare Classic 1K card
-
-    Note that you need the baud rate to be 115200 because we need to print
-    out the data and read from the card at the same time.
-*/
-/**************************************************************************/
-
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_PN532.h>
 #include <DueFlashStorage.h> 
-#include <Keyboard.h>
 
-
+// Global Vars
 #define PN532_SS   (10)
 #define PN532_IRQ   (2)
 #define PN532_RESET (3)  // Not connected by default on the NFC Shield
 Adafruit_PN532 nfc(PN532_SS);
 DueFlashStorage dueFlashStorage;
+#define flashAddress (5)
+#define greenLedPin (22)
+#define redLedPin (23)
+#define motorPin (24)
+#define motorDuration (700)
+
+// We store credit card data block here 
+struct CreditCard {
+  uint8_t uid[7];
+  char* cardNumber;
+  char* expiry;
+  char* cardHolderName;
+};
+
+CreditCard primaryCard;
+uint8_t masterUid[7];
+
 void setup(void) {
   #ifndef ESP8266
-    while (!Serial); 
+    while (!Serial); // for Leonardo/Micro/Zero
   #endif
+
+  // HW Pins setup 
+  pinMode(greenLedPin, OUTPUT);
+  pinMode(redLedPin, OUTPUT);
+  pinMode(motorPin, OUTPUT);
+  digitalWrite(motorPin, LOW);
+  resetLEDs();
   
-  // has to be fast to dump the entire memory contents!
+  // Serial Setup   
   Serial.begin(115200);
-  Serial.println("Looking for PN532...");
+  Serial.println("Hello!");
 
+  // NFC Setup
   nfc.begin();
-  Keyboard.begin();
-
   uint32_t versiondata = nfc.getFirmwareVersion();
-  if (! versiondata){
+  if (! versiondata) {
     Serial.print("Didn't find PN53x board");
     while (1); // halt
   }
   
-  // Got ok data, print it out!
-  Serial.print("Found chip PN5"); Serial.println((versiondata>>24) & 0xFF, HEX);
-  Serial.print("Firmware ver. "); Serial.print((versiondata>>16) & 0xFF, DEC);
+  // NFC Shield Version
+  Serial.print("Found chip PN5"); Serial.println((versiondata>>24) & 0xFF, HEX); 
+  Serial.print("Firmware ver. "); Serial.print((versiondata>>16) & 0xFF, DEC); 
   Serial.print('.'); Serial.println((versiondata>>8) & 0xFF, DEC);
-
+  
+  // Set the max number of retry attempts to read from a card
+  // This prevents us from waiting forever for a card, which is
+  // the default behaviour of the PN532.
+  nfc.setPassiveActivationRetries(0xFF);
+  
   // configure board to read RFID tags
   nfc.SAMConfig();
-  Serial.println("Waiting for an ISO14443A Card ...");
-}
 
+  // Put Board into reset mode
+  resetMode();
+}
 
 void loop(void) {
-  uint8_t success;                          // Flag to check if there was an error with the PN532
+  boolean success;
   uint8_t uid[] = { 0, 0, 0, 0, 0, 0, 0 };  // Buffer to store the returned UID
-  uint8_t uidLength;                        // Length of the UID (4 or 7 bytes depending on ISO14443A card type)
-  uint8_t currentblock;                     // Counter to keep track of which block we're on
-  bool authenticated = false;               // Flag to indicate if the sector is authenticated
-  uint8_t data[16]; 
-  uint8_t readData[32]; // Array to store block data during reads
-  byte value;
-  uint8_t address = 0;
-  // Keyb on NDEF and Mifare Classic should be the same
-  uint8_t keyuniversal[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
-
+  uint8_t uidLength;        // Length of the UID (4 or 7 bytes depending on ISO14443A card type)
+  
   // Wait for an ISO14443A type cards (Mifare, etc.).  When one is found
-  // 'uid' will be populated with the UID, and uidLength will indicate
-
- if (Serial.available() > 0) {  
-    Serial.println("SERIAL AVAILABLE!");
-    // read incoming serial data:
-    char inChar = Serial.read();
-    // Type the next ASCII value from what you received:
-    Serial.println("CHARACTER READ: ");
-    Serial.println(inChar);
-  }
+  // 'uid' will be populated with the UID
+  success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, &uid[0], &uidLength);
   
-  success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength);
+  if (success) {
+    printCard(uid, uidLength);
 
-  if (success){
-    // Display some basic information about the card
-    Serial.println("Found an ISO14443A card");
-    Serial.print("  UID Length: ");Serial.print(uidLength, DEC);Serial.println(" bytes");
-    Serial.print("  UID Value: ");
+    bool match = !(strcmp((char *) uid, (char *)  masterUid));
+    if (match){
+        Serial.println("True!");    
 
-    address=0;
-
-    for (int a = 0; a < uidLength; a++){
-      readData[a]=dueFlashStorage.read(address);
-      address= address+1;    
+       // Lock Open Logic:
+       unLock(uid, uidLength);
     }
-
-    for (int a = 0; a < uidLength; a++){
-      Serial.print(readData[a], HEX);
+    else{
+      Serial.println("False!");
     }
- 
+    
+  // Wait 1 second before continuing
+  delay(1000);
   }
-  
-  // Wait a bit before trying again
-  Serial.flush();
+  else
+  {
+    // PN532 probably timed out waiting for a card
+    Serial.println("Timed out waiting for a card");
+  }
 }
+
+// Print a card based on following @param characteristics
+void printCard(uint8_t *uid, uint8_t uidLength)
+{
+    Serial.println("\n\nFound a card!");
+    //Serial.print("UID Length: ");Serial.print(uidLength, DEC);Serial.println(" bytes");
+    Serial.print("UID Value: ");
+    for (uint8_t i=0; i < uidLength; i++) 
+    {
+      Serial.print(uid[i], HEX); 
+    }
+    Serial.println("");
+}
+
+/// Unlock the lock using the following uuid & length
+bool unLock(uint8_t *uid, uint8_t uidLength)
+{
+    Serial.println("Unlocking door...");
+    // Light up green led for 1 sec
+    digitalWrite(greenLedPin, HIGH);  
+    digitalWrite(redLedPin, LOW);     
+    delay(2500);   
+    digitalWrite(motorPin, HIGH);     
+    delay(motorDuration);                   // Motor spin length
+    digitalWrite(motorPin, LOW);
+
+    // Lock the doors now
+    lock(uid, uidLength);
+    return true;
+}
+
+/// Unlock the lock using the following uuid & length
+bool lock(uint8_t *uid, uint8_t uidLength)
+{
+    Serial.println("Locking door...");
+    // Light up red led forever
+    digitalWrite(greenLedPin, LOW);  
+    digitalWrite(redLedPin, HIGH); 
+    return true;       
+}
+
+/// Accept master key (rest mode)
+/// In this mode we flash leds to show we are accepting master key:
+void resetMode()
+{
+    // First try to find master key:
+    boolean success;
+    uint8_t uid[] = { 0, 0, 0, 0, 0, 0, 0 };  // Buffer to store the returned UID
+    uint8_t uidLength;        // Length of the UID (4 or 7 bytes depending on ISO14443A card type)
+    
+    // ISO14443A type - 'uid' will be populated with the UID
+    Serial.println("Waiting for master key...");
+    
+    // LED Programmming:
+    // Both leds are ON
+    digitalWrite(greenLedPin, HIGH); 
+    digitalWrite(redLedPin, HIGH);  
+       
+    success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, &uid[0], &uidLength);
+    if (success) {
+      Serial.println("Setting master card: ");
+      Serial.print("Master Key Value: ");
+      for (uint8_t i=0; i < uidLength; i++) 
+      {
+        Serial.print(uid[i], HEX); 
+      }
+      Serial.println("");
+    
+      // Copy our master key - global var
+      memcpy(masterUid, &uid, sizeof sizeof(uid));
+
+      // LED Programmming:
+      // Alternate flashing led 
+      delay(200);
+      digitalWrite(greenLedPin, LOW); 
+      digitalWrite(redLedPin, LOW);  
+      delay(200);
+      digitalWrite(redLedPin, HIGH);  
+      digitalWrite(greenLedPin, LOW);
+    } 
+}
+
+/// Resets LED's (Default: red is on , green is off)
+void resetLEDs()
+{
+    // Red led is on
+    digitalWrite(greenLedPin, LOW);  
+    digitalWrite(redLedPin, HIGH);   
+}
+
+
 
