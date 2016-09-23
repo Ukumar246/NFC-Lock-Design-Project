@@ -10,12 +10,15 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_PN532.h>
+#include <DueFlashStorage.h> 
+#include <Keyboard.h>
+
 
 #define PN532_SS   (10)
 #define PN532_IRQ   (2)
 #define PN532_RESET (3)  // Not connected by default on the NFC Shield
 Adafruit_PN532 nfc(PN532_SS);
-
+DueFlashStorage dueFlashStorage;
 void setup(void) {
   #ifndef ESP8266
     while (!Serial); 
@@ -26,6 +29,7 @@ void setup(void) {
   Serial.println("Looking for PN532...");
 
   nfc.begin();
+  Keyboard.begin();
 
   uint32_t versiondata = nfc.getFirmwareVersion();
   if (! versiondata){
@@ -50,13 +54,25 @@ void loop(void) {
   uint8_t uidLength;                        // Length of the UID (4 or 7 bytes depending on ISO14443A card type)
   uint8_t currentblock;                     // Counter to keep track of which block we're on
   bool authenticated = false;               // Flag to indicate if the sector is authenticated
-  uint8_t data[16];                         // Array to store block data during reads
-
+  uint8_t data[16]; 
+  uint8_t readData[32]; // Array to store block data during reads
+  byte value;
+  uint8_t address = 0;
   // Keyb on NDEF and Mifare Classic should be the same
   uint8_t keyuniversal[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 
   // Wait for an ISO14443A type cards (Mifare, etc.).  When one is found
   // 'uid' will be populated with the UID, and uidLength will indicate
+
+ if (Serial.available() > 0) {  
+    Serial.println("SERIAL AVAILABLE!");
+    // read incoming serial data:
+    char inChar = Serial.read();
+    // Type the next ASCII value from what you received:
+    Serial.println("CHARACTER READ: ");
+    Serial.println(inChar);
+  }
+  
   success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength);
 
   if (success){
@@ -64,16 +80,21 @@ void loop(void) {
     Serial.println("Found an ISO14443A card");
     Serial.print("  UID Length: ");Serial.print(uidLength, DEC);Serial.println(" bytes");
     Serial.print("  UID Value: ");
-    Serial.println("UID Core:");
+
+    address=0;
+
     for (int a = 0; a < uidLength; a++){
-      Serial.print(uid[a], HEX);
-      Serial.print(" ");
+      readData[a]=dueFlashStorage.read(address);
+      address= address+1;    
     }
-    Serial.println("UID Value:");
-    nfc.PrintHex(uid, uidLength);
-    Serial.println("");
+
+    for (int a = 0; a < uidLength; a++){
+      Serial.print(readData[a], HEX);
+    }
+ 
   }
   
   // Wait a bit before trying again
   Serial.flush();
 }
+
