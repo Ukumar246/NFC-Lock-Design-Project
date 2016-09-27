@@ -9,6 +9,7 @@
 #define PN532_RESET (3)  // Not connected by default on the NFC Shield
 Adafruit_PN532 nfc(PN532_SS);
 DueFlashStorage dueFlashStorage;
+
 #define flashAddress (5)
 #define greenLedPin (22)
 #define redLedPin (23)
