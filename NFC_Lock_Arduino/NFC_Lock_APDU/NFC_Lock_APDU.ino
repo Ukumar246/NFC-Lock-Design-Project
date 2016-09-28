@@ -65,26 +65,25 @@ void loop(void) {
             // Print Data
             Serial.print("responseLength: "); Serial.println(responseLength);
             nfc.PrintHexChar(response, responseLength);
-
-            // Send Second Headers 
+              
+            /* Send Second Headers 
             do {
-                uint8_t apdu[] = "Hello from Arduino";
-                uint8_t back[32];
-                uint8_t length = 32; 
+        uint8_t apdu[] = "Hello from Arduino";
+        uint8_t back[32];
+        uint8_t length = 32; 
 
-                success = nfc.inDataExchange(apdu, sizeof(apdu), back, &length);
+        success = nfc.inDataExchange(apdu, sizeof(apdu), back, &length);
         
-                if(success) {
-         
-                  Serial.print("responseLength: "); Serial.println(length);
-                  nfc.PrintHexChar(back, length);
+          if(success) {
+            Serial.print("responseLength: "); Serial.println(length);
+            nfc.PrintHexChar(back, length);
+          }
+          else {
+           Serial.println("Broken connection?"); 
             }
-        else {
-          
-          Serial.println("Broken connection?"); 
         }
-      }
-      while(success);
+          while(success);
+        */
         }
         else{
             Serial.println("Failed reading data"); 
