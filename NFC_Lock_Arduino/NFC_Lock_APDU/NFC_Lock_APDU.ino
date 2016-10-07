@@ -263,7 +263,6 @@ void printArray(uint8_t array[], uint8_t count){
     uint8_t i = 0; 
     for (i=0; i< count; i++){
         Serial.print(array[i],HEX);
-      
     }
 }
 
