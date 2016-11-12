@@ -1,130 +1,43 @@
-#include <Wire.h>
-#include <SPI.h>
-#include <Adafruit_PN532.h>
 
-// Constructor for PN532
-#define PN532_SS   (15)
-#define MOTOR1 (0)
-#define MOTOR2 (5)
-//  Adafruit_PN532(uint8_t clk, uint8_t miso, uint8_t mosi, uint8_t ss);  // Software SPI
-
-
-//Adafruit_PN532 nfc(13, 16, 5, PN532_SS);  // Software SPI
+#include "NFC_Lock_APDU.h"
+/*
+ * Setup the pin for the PN_532
+ */
 Adafruit_PN532 nfc(PN532_SS);
 
-#define BLOCK_LIMIT (3)
-
-#if defined(ARDUINO_ARCH_SAMD)
-// for Zero, output on USB Serial console, remove line below if using programming port to program the Zero!
-// also change #define in Adafruit_PN532.cpp library file
-#define Serial SerialUSB
-#endif
-
-//CODES: Transfer to include file
-
-//for selecting the first request
-uint8_t selectApdu[] =  {
-  0x00, /* CLA */
-  0xA4, /* INS */
-  0x04, /* P1  */
-  0x00, /* P2  */
-  0x0E, /* Lc - Length of AID  0x05 -> 0x0E*/
-  0x32, 0x50, 0x41, 0x59, 0x2E, 0x53, 0x59, 0x53, 0x2E, 0x44, 0x44, 0x46, 0x30, 0x31,   /* AID defined on EMV*/
-  0x00  /* Le  */
-};
-uint8_t visaApdu[] =  {
-  0x00, /* CLA */
-  0xA4, /* INS */
-  0x04, /* P1  */
-  0x00, /* P2  */
-  0x07, /* Lc - Length of AID  0x05 -> 0x0E*/
-  0xA0, 0x00, 0x00, 0x00, 0x03, 0x10, 0x10,   /* AID defined on EMV*/
-  0x00  /* Le  */
-};
-//header for the third round
-uint8_t thirdRoundCode [] = {
-  0x80, /* CLA */
-  0xA8, /* INS */
-  0x00, /* P1  */
-  0x00, /* P2  */
-};
-uint8_t terminalTransQualifiers [] = {
-  0x28,
-  0x00,
-  0x00,
-  0x00,
-
-};
-
-
-
-uint8_t authorizedAmount [] = {
-  0x00,
-  0x00,
-  0x00,
-  0x00,
-  0x00,
-  0x00,
-};
-uint8_t randomNumber [] = {
-  0x00,
-  0x00,
-  0x00,
-  0x00,
-
-};
-uint8_t transactionCurrencyCode [] = {
-  0x09,
-  0x78,
-};
-//DEFAULT CODE HEADER STRUCTURE FOR NORMAL CREDIT CARDS
-uint8_t requestCardNumber[] =  {
-  0x80, /* CLA */
-  0xA8, /* INS */
-  0x00, /* P1  */
-  0x00, /* P2  */
-  0x12, /* PDOL lengths added together --- 4+6+4+2 = 16 + 2 = 18 (the plus 2 is for the 0x83 and the 0x00 of Le)---- the country code is irrelevant*/
-  0x83, 0x10, 0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x24,/* AID defined on EMV*/
-  0x00 /* Le  */
-};
-uint8_t requestApplePayAccount[] =  {
-  0x80, /* CLA */
-  0xA8, /* INS */
-  0x00, /* P1  */
-  0x00, /* P2  */
-  0x37, /* Lc - Length of AID  0x05 -> 0x0E*/
-  0x83, 0x35, 0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x50, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09, 0x78, 0x16, 0x10, 0x05, 0x00, 0x8F, 0x9C, 0x20, 0xEE, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* AID defined on EMV*/
-  0x00 /* Le  */
-};
-
-// Setup for PN532 Shield
+/*
+ * PN_532 set up
+ */
+ 
 void setup(void) {
 #ifndef ESP8266
   while (!Serial);
 #endif
 
-  // has to be fast to dump the entire memory contents!
   Serial.begin(115200);
   Serial.println("Looking for PN532...");
-
   nfc.begin();
 
   uint32_t versiondata = nfc.getFirmwareVersion();
   if (! versiondata) {
+    
     Serial.print("Didn't find PN53x board");
     while (1); // halt
+    
   }
-  // Got ok data, print it out!
-  Serial.print("Found chip PN5"); Serial.println((versiondata >> 24) & 0xFF, HEX); Serial.print("Firmware ver. "); Serial.print((versiondata >> 16) & 0xFF, DEC); Serial.print('.'); Serial.println((versiondata >> 8) & 0xFF, DEC);
+  
+  //Serial.print("Found chip PN5"); Serial.println((versiondata >> 24) & 0xFF, HEX); Serial.print("Firmware ver. "); Serial.print((versiondata >> 16) & 0xFF, DEC); Serial.print('.'); Serial.println((versiondata >> 8) & 0xFF, DEC);
+  
   // configure board to read RFID tags
   nfc.SAMConfig();
   Serial.println("Waiting for an ISO14443A card..");
-
-  if (!lockHWSetup())
-  {
-     Serial.println("Lock HW Setup Failed!");
-     while(!lockHWSetup());
-  }
+  
+//
+//  if (!lockHWSetup())
+//  {
+//     Serial.println("Lock HW Setup Failed!");
+//     while(!lockHWSetup());
+//  }
 
   Serial.println("Ready...");
 }
@@ -141,145 +54,153 @@ void loop(void) {
 
     //TODO: the second header has corner case for hte application ID not being same for all the cards.
     if (success) {
-      do {
+ 
         uint8_t back[255];
         uint8_t length = 255;
-
-        //tester
-        Serial.println("BACK ARRAY CONTENTS AS PASSED IN: ");
 
         success = nfc.inDataExchange(visaApdu, sizeof(visaApdu), back, &length);
 
         //From back  you can detect the kind of card you are reading example VISA, MASTERCARD---
         if (success) {
-          Serial.println("function Print: "); printArray(back, sizeof(back));
-          nfc.PrintHexChar(back, length);
+          
           uint8_t pdolLengths = totalPdolLengths (back, sizeof(back));
-          Serial.print("Total lengths of PDOL RETURNED:  "); Serial.println(pdolLengths);
           readVisaCardNumber(success, pdolLengths);
+          
         } else {
+          
           Serial.println("Could not send second header---Please hold card for longer-------");
+          
         }
-      } while (success);
+      
     }
     else {
-      Serial.println("Came out of success while loop---Failed reading data---");
-        delay(200);
+      
+      Serial.println("Could not read the first response from the card----- Hold card again!------");
+      delay(200);
+      
     }
   
   }
 }
 
 
-bool lockHWSetup()
-{
-  pinMode(MOTOR1, OUTPUT);
-  pinMode(MOTOR2, OUTPUT);
+//bool lockHWSetup()
+//{
+//  pinMode(MOTOR1, OUTPUT);
+//  pinMode(MOTOR2, OUTPUT);
+//
+//  // Turn off the motor
+//  digitalWrite(MOTOR1, LOW); // set pin 2 on L293D low
+//  digitalWrite(MOTOR2, LOW); // set pin 7 on L293D high
+//  
+//  return true;
+//}
 
-  // Turn off the motor
-  digitalWrite(MOTOR1, LOW); // set pin 2 on L293D low
-  digitalWrite(MOTOR2, LOW); // set pin 7 on L293D high
-  
-  return true;
-}
+//bool unlock(){
+//  Serial.println("[status]: Unlocking door...");
+//  digitalWrite(MOTOR1, LOW); // set pin 2 on L293D low
+//  digitalWrite(MOTOR2, HIGH); // set pin 7 on L293D high
+// 
+//  delay(500);   //1sec
+//
+//  // Turn off the motor
+//  digitalWrite(MOTOR1, LOW); // set pin 2 on L293D low
+//  digitalWrite(MOTOR2, LOW); // set pin 7 on L293D high
+//  return true;
+//}
 
-bool unlock(){
-  Serial.println("[status]: Unlocking door...");
-  digitalWrite(MOTOR1, LOW); // set pin 2 on L293D low
-  digitalWrite(MOTOR2, HIGH); // set pin 7 on L293D high
- 
-  delay(500);   //1sec
-
-  // Turn off the motor
-  digitalWrite(MOTOR1, LOW); // set pin 2 on L293D low
-  digitalWrite(MOTOR2, LOW); // set pin 7 on L293D high
-  return true;
-}
+/*
+ * @Description: Can only process VISA cards as it sends the required information over.
+ */
 
 void readVisaCardNumber(bool success, uint8_t pdolLengths) {
-  // Print Data
-  Serial.println("VISA Card Detected");
-  //            nfc.PrintHexChar(response, responseLength);
-  Serial.println("PDOL lengths inside readVisa: "); Serial.print(pdolLengths);
 
   uint8_t creditCardNumber[8];
-  //           tester for the compare credit card function
-  uint8_t testerCardNumber [8];
 
-  do {
     uint8_t userInfo[255];
     uint8_t length = 255;
 
     if (pdolLengths <= 16) {
+      
       //normal credit cards (wallet)
       success = nfc.inDataExchange(requestCardNumber, sizeof(requestCardNumber), userInfo, &length);
+      
     } else {
-      //apple pay which requires more information
+      
+      //apple pay:  which requires more payment options info
       success = nfc.inDataExchange(requestApplePayAccount, sizeof(requestApplePayAccount), userInfo, &length);
+      
     }
 
     //this reponse has the user information: credit card number etc.
     if (success) {
-      Serial.print("3rd Round: "); Serial.println(length);
+      
+      Serial.print("3rd Round (User information): ");
       nfc.PrintHexChar(userInfo, length);
 
       uint8_t i = 0;
-      bool debugger = false;
-      uint8_t decider = 0;
       for (i = 0; i < sizeof(userInfo); i++) {
         uint8_t responseDigit = userInfo[i];
         //credit card data in track 2. This is in second track between 57 13 (45 20 01 00 43 08 75 45) D1
         //D1=209
         if (responseDigit == 209 || responseDigit == 210) {
-          debugger = true;
-          //                      Serial.print("Individual Digit Code: "); Serial.println(responseDigit);Serial.println("at the index: ");Serial.println(i);
-          //you;ve found the D1
+        
+          //Found D1
           //now loop back 8 sections of the array to get the 8 bytes of the credit card number
-          Serial.println("FOUND : "); Serial.println(responseDigit, HEX);
+          Serial.println("Found D1 : "); Serial.println(responseDigit, HEX);
+          
           uint8_t j = i;
           uint8_t k = 0;
-          //                        Serial.print("You Credit Card Number: ");
+          //Serial.print("You Credit Card Number: ");
           for (j = j - 8, k = 0; j < i; j++, k++) {
-            //                           Serial.println(userInfo[j],HEX);
+        
             //size of credit card cannot be more than 8 bytes
             if (k < 8) {
+              
               //store the decoded credit card number into the credit card array
               creditCardNumber[k] = userInfo[j];
-              //TODO: only for testing purposes. remove testerCardNumber later
-              testerCardNumber[k] = userInfo[j];
+              
             } else {
+              
               Serial.println("Indexing Issue: card k != j");
+              
             }
           }
 
         }
 
-      }
+     }
 
-      if (debugger == false) {
-        Serial.println("This card does not contain the end of track 2 value D1 or D2. Please try another card");
-      }
-      //                  if true the continue..
-
-      uint8_t w = 0;
-      Serial.println("Credit Card Number Stored in the Array: ");
-      for (w = 0; w < sizeof(creditCardNumber); w++) {
-        Serial.print(creditCardNumber[w], HEX);
-      }
-      Serial.print("\n");
-      unlock();
-      delay(5000);
+      Serial.println("Credit Card Number Stored: ");
+      printArray(creditCardNumber,sizeof(creditCardNumber));
+      
+      //unlock();
+      Serial.println("Unlocking Door--- ");
+      delay(3000);
       Serial.println("Read card again...");
     }
     else {
-      Serial.println("Broken connection---please hold the card for longer---SUCCESS returned false");
+      Serial.println("Broken connection--Third and final response was not recieved correctly---Failed to read Credit Card");
     }
-  }
-  while (success);
+ 
 }
 
 
-//Utility Function for comparing credit cards:
+/**
+ * Utilities Below: 
+ * printArray: Prints array when given the array and the length of the array
+ * compareCardNumber: compares whether two cards are the same given their contents and lengths
+ */
+ 
+
+void printArray(uint8_t array[], uint8_t count) {
+  uint8_t i = 0;
+  for (i = 0; i < count; i++) {
+    Serial.print(array[i], HEX);
+  }
+  Serial.print("\n");
+}
+
 bool compareCardNumber(uint8_t *firstCard, uint8_t firstCardLength, uint8_t *secondCard, uint8_t secondCardLength) {
 
   //IMPORTANT: the numbers in the credit card arrays are stored as hex values
@@ -303,15 +224,12 @@ bool compareCardNumber(uint8_t *firstCard, uint8_t firstCardLength, uint8_t *sec
 }
 
 
-//function to add header
-void printArray(uint8_t array[], uint8_t count) {
-  uint8_t i = 0;
-  for (i = 0; i < count; i++) {
-    Serial.print(array[i], HEX);
-  }
-}
+/*
+ * @Description: Calculates the total length of the Processing Data Options the credit card requires.
+ *               The length of the PDOL is used to diffentiate between regular visa cards which require
+ *               less options and Apple Pay.
+ */
 
-//function to dynamically calculate the numberof pdol length options
 uint8_t totalPdolLengths (uint8_t back[], uint8_t count) {
   uint8_t pdolLengths = 0;
 
@@ -359,78 +277,4 @@ uint8_t totalPdolLengths (uint8_t back[], uint8_t count) {
 
 }
 
-uint8_t* constructVisaCardHeader(uint8_t pdolLengths) {
-  //Magic number 6 includes the 2 bytes for 0x83 and the LE byte 00 + the header 0x80,0xA8,0x00,0x00
-  uint8_t totalLength = pdolLengths + 8;
-  uint8_t testerHeader[totalLength];
-  uint8_t i = 0;
-  //CONSTRUCT SENDING MESSAGE 3---------------------------------------------------------------------------------------------------------------------------------------
-
-  //ADD HEADER:works
-  for (i = 0; i < 4; i++) {
-    testerHeader[i] = thirdRoundCode[i];
-  }
-
-  //  ADD 0x83 and actual pdol Length (i should be 4 here)
-  Serial.println("i of pdolLengths: ");  Serial.println(i);
-  testerHeader[i] = pdolLengths + 2;
-  i++;
-  Serial.println("pdolLenghts +2: ");  Serial.println(pdolLengths + 2);
-  Serial.println("i of 0x83: ");  Serial.println(i);
-  testerHeader[i] = 131;
-
-  i++;
-  Serial.println("i of lengths without 83: ");  Serial.println(i);
-  testerHeader[i] = pdolLengths;
-
-  i++;
-  // ADD the terminal transaction qualifiers
-  uint8_t j = 0;
-  Serial.println("i of start of term qualifiers: ");  Serial.println(i);
-  testerHeader[i] = pdolLengths;
-  for (j = 0; j < sizeof(terminalTransQualifiers); j++, i++) {
-    Serial.print("The terminal transaction quals: "); Serial.print(terminalTransQualifiers[j]);
-    testerHeader[i] = terminalTransQualifiers[j];
-  }
-
-  // it is 11
-  Serial.println("i of end of term qualifiers: ");  Serial.println(i);
-  //  ADD the authorized amount
-
-  for (j = 0; j < sizeof(authorizedAmount); j++, i++) {
-    Serial.print("The authorized amout quals: "); Serial.print(authorizedAmount[j]);
-    testerHeader[i] = authorizedAmount[j];
-  }
-
-  Serial.println("i of end of authorized amount: ");  Serial.println(i);
-
-
-  for (j = 0; j < sizeof(randomNumber); j++, i++) {
-    Serial.print("The random number quals: "); Serial.print(randomNumber[j]);
-    testerHeader[i] = randomNumber[j];
-  }
-
-  Serial.println("i of end of randomNumber: ");  Serial.println(i);
-
-  // transactionCurrencyCode
-
-  for (j = 0; j < sizeof(transactionCurrencyCode); j++, i++) {
-    Serial.print("The transaction currenc code quals: "); Serial.print(transactionCurrencyCode[j]);
-    testerHeader[i] = transactionCurrencyCode[j];
-  }
-
-  Serial.println("i of end of transactionCurrencyCode: ");  Serial.println(i);
-
-  // LE
-
-  testerHeader[i] = 0;
-
-  //print the complete header to send
-  for (i = 0; i < sizeof(testerHeader); i++) {
-    Serial.println(testerHeader[i], HEX);
-  }
-
-  return testerHeader;
-
-}
 
