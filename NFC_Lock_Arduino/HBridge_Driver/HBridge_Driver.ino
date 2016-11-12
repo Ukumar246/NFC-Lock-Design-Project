@@ -1,7 +1,7 @@
 
 int switchPin = 2; // switch input
-int motor1Pin1 = 3; // pin 2 on L293D
-int motor1Pin2 = 4; // pin 7 on L293D
+int motor1Pin1 = 0; // pin 2 on L293D
+int motor1Pin2 = 5; // pin 7 on L293D
 int enablePin = 9; // pin 1 on L293D
 
 void setup() {
@@ -15,6 +15,8 @@ void setup() {
 
   // set enablePin high so that motor can turn on:
   digitalWrite(enablePin, HIGH);
+  digitalWrite(motor1Pin1, LOW);
+  digitalWrite(motor1Pin2, LOW);
 }
 
 bool unlock = false;
@@ -25,11 +27,12 @@ void loop() {
   // if the switch is high, motor will turn on one direction:
   if (unlock) {
     digitalWrite(motor1Pin1, LOW); // set pin 2 on L293D low
-    digitalWrite(motor1Pin2, HIGH); // set pin 7 on L293D high
+    digitalWrite(motor1Pin2, HIGH);// set pin 7 on L293D high
+    delay(500);
   }
   // if the switch is low, motor will turn in the opposite direction:
   else {
-    digitalWrite(motor1Pin1, HIGH); // set pin 2 on L293D high
+    digitalWrite(motor1Pin1, LOW); // set pin 2 on L293D high
     digitalWrite(motor1Pin2, LOW); // set pin 7 on L293D low
   }
 }

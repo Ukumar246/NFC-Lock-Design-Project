@@ -119,6 +119,14 @@ void setup(void) {
   // configure board to read RFID tags
   nfc.SAMConfig();
   Serial.println("Waiting for an ISO14443A card..");
+
+  if (!lockHWSetup())
+  {
+     Serial.println("Lock HW Setup Failed!");
+     while(!lockHWSetup());
+  }
+
+  Serial.println("Ready...");
 }
 
 void loop(void) {
@@ -156,22 +164,36 @@ void loop(void) {
     }
     else {
       Serial.println("Came out of success while loop---Failed reading data---");
+        delay(200);
     }
-    delay(200);
+  
   }
 }
 
 
-void unlock (bool lock){
-  if (!lock) {
-    digitalWrite(MOTOR1, LOW); // set pin 2 on L293D low
-    digitalWrite(MOTOR2, HIGH); // set pin 7 on L293D high
-  }
-  // if the switch is low, motor will turn in the opposite direction:
-  else {
-    digitalWrite(MOTOR1, HIGH); // set pin 2 on L293D high
-    digitalWrite(MOTOR2, LOW); // set pin 7 on L293D low
-  }
+bool lockHWSetup()
+{
+  pinMode(MOTOR1, OUTPUT);
+  pinMode(MOTOR2, OUTPUT);
+
+  // Turn off the motor
+  digitalWrite(MOTOR1, LOW); // set pin 2 on L293D low
+  digitalWrite(MOTOR2, LOW); // set pin 7 on L293D high
+  
+  return true;
+}
+
+bool unlock(){
+  Serial.println("[status]: Unlocking door...");
+  digitalWrite(MOTOR1, LOW); // set pin 2 on L293D low
+  digitalWrite(MOTOR2, HIGH); // set pin 7 on L293D high
+ 
+  delay(500);   //1sec
+
+  // Turn off the motor
+  digitalWrite(MOTOR1, LOW); // set pin 2 on L293D low
+  digitalWrite(MOTOR2, LOW); // set pin 7 on L293D high
+  return true;
 }
 
 void readVisaCardNumber(bool success, uint8_t pdolLengths) {
@@ -245,8 +267,9 @@ void readVisaCardNumber(bool success, uint8_t pdolLengths) {
         Serial.print(creditCardNumber[w], HEX);
       }
       Serial.print("\n");
-      unlock(false);
-      delay(10000);
+      unlock();
+      delay(5000);
+      Serial.println("Read card again...");
     }
     else {
       Serial.println("Broken connection---please hold the card for longer---SUCCESS returned false");
