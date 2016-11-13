@@ -1,5 +1,7 @@
 
 #include "NFC_Lock_APDU.h"
+#include <EEPROM.h>
+bool programming_mode = true;
 /*
  * Setup the pin for the PN_532
  */
@@ -17,6 +19,7 @@ void setup(void) {
   Serial.begin(115200);
   Serial.println("Looking for PN532...");
   nfc.begin();
+  EEPROM.begin(512);
 
   uint32_t versiondata = nfc.getFirmwareVersion();
   if (! versiondata) {
@@ -43,6 +46,26 @@ void setup(void) {
 }
 
 void loop(void) {
+
+  if (programming_mode==true){
+    Serial.println("Operating in programming mode---Please tap your card to SAVE data---");
+  }else if (programming_mode == false){
+     Serial.println("Operating in use mode---Please tap your card to UNLOCK door---");
+  }
+
+  readCreditCard();
+ 
+ 
+}
+
+/*
+ * @Description: readCreditCard deal with sending the intial and second headers
+ *               for communicating with the card. The final one is sent via readVisaCardNumber.
+ *               This is seperated into a function as is called in the programmable mode 
+ *               and the  regular mode for unlocking.
+ */
+
+void readCreditCard(){
   bool success;
 
   success = nfc.inListPassiveTarget();
@@ -82,8 +105,6 @@ void loop(void) {
   
   }
 }
-
-
 //bool lockHWSetup()
 //{
 //  pinMode(MOTOR1, OUTPUT);
@@ -132,7 +153,7 @@ void readVisaCardNumber(bool success, uint8_t pdolLengths) {
       
     }
 
-    //this reponse has the user information: credit card number etc.
+    //This reponse has the user information: credit card number etc.
     if (success) {
       
       Serial.print("3rd Round (User information): ");
@@ -141,12 +162,11 @@ void readVisaCardNumber(bool success, uint8_t pdolLengths) {
       uint8_t i = 0;
       for (i = 0; i < sizeof(userInfo); i++) {
         uint8_t responseDigit = userInfo[i];
-        //credit card data in track 2. This is in second track between 57 13 (45 20 01 00 43 08 75 45) D1
-        //D1=209
+        
+        //credit card data in track 2. This is in second track between 57 13 (45 20 01 00 43 08 75 45) D1=209/D2=210
         if (responseDigit == 209 || responseDigit == 210) {
         
-          //Found D1
-          //now loop back 8 sections of the array to get the 8 bytes of the credit card number
+          //Found D1 (End of credit card track): Now loop back 8 sections of the array to get the 8 bytes of the credit card number
           Serial.println("Found D1 : "); Serial.println(responseDigit, HEX);
           
           uint8_t j = i;
@@ -162,7 +182,7 @@ void readVisaCardNumber(bool success, uint8_t pdolLengths) {
               
             } else {
               
-              Serial.println("Indexing Issue: card k != j");
+              Serial.println("[Panic]: Size of credit card number more than 8 bytes>");
               
             }
           }
@@ -173,11 +193,20 @@ void readVisaCardNumber(bool success, uint8_t pdolLengths) {
 
       Serial.println("Credit Card Number Stored: ");
       printArray(creditCardNumber,sizeof(creditCardNumber));
+
+      if (programming_mode){
+
+        //save the card number to EEPROM.
+        writeEEPROM(creditCardNumber,sizeof(creditCardNumber));
+        programming_mode=false;
+        
+      }else{
+
+          readEEPROMAndCompare(creditCardNumber,sizeof(creditCardNumber));
+          
+      }
       
-      //unlock();
-      Serial.println("Unlocking Door--- ");
-      delay(3000);
-      Serial.println("Read card again...");
+      
     }
     else {
       Serial.println("Broken connection--Third and final response was not recieved correctly---Failed to read Credit Card");
@@ -188,8 +217,8 @@ void readVisaCardNumber(bool success, uint8_t pdolLengths) {
 
 /**
  * Utilities Below: 
- * printArray: Prints array when given the array and the length of the array
- * compareCardNumber: compares whether two cards are the same given their contents and lengths
+ * @Description: printArray -  Prints array when given the array and the length of the array
+ * @Description: compareCardNumbe -  compares whether two cards are the same given their contents and lengths
  */
  
 
@@ -206,7 +235,7 @@ bool compareCardNumber(uint8_t *firstCard, uint8_t firstCardLength, uint8_t *sec
   //IMPORTANT: the numbers in the credit card arrays are stored as hex values
 
   if (firstCardLength != secondCardLength) {
-    //if size not eaual they are different cards
+    //if somehow size not eaual they are different cards
     return false;
   }
   //assuming the lengths are equal
@@ -218,6 +247,11 @@ bool compareCardNumber(uint8_t *firstCard, uint8_t firstCardLength, uint8_t *sec
     }
   }
 
+  Serial.println("Comparator --- Your saved Card Number Was: ");
+  for (i = 0; i < firstCardLength; ++i) { Serial.print(firstCard[i],HEX); }
+  Serial.println("Comparator --- Your tapped card number was: ");
+  for (i = 0; i < secondCardLength; ++i) { Serial.print(secondCard[i],HEX); }
+  
   //once past the for loop you know that all digits are the same and cards match
   return true;
 
@@ -240,41 +274,114 @@ uint8_t totalPdolLengths (uint8_t back[], uint8_t count) {
 
     //9F=159 38=56
     if (back[j] == 159 && back[j + 1] == 56) {
+      
       //found the PDOL start
-      //not super relevant
       uint8_t pdolLength = back[j + 2];
       Serial.print("found the PDOL section: "); Serial.println(pdolLength, HEX);
+      
     } else if (back[j] == 159 && back[j + 1] == 102) {
+      
       //Terminal Transaction Qualifiers
       pdolLengths += back[j + 2];
+      
     } else if (back[j] == 159 && back[j + 1] == 2) {
+      
       //amount authorized
       pdolLengths += back[j + 2];
+      
     } else if (back[j] == 159 && back[j + 1] == 55) {
+      
       //Unpredictable number
       pdolLengths += back[j + 2];
+      
     } else if (back[j] == 95 && back[j + 1] == 42) {
+      
       //TRansaction Currency Code
       pdolLengths += back[j + 2];
+      
     } else if (back[j] == 149) {
+      
       //TVR
       pdolLengths += back[j + 1];
+      
     } else if (back[j] == 154) {
+      
       //Transaction Date
       pdolLengths += back[j + 1];
+      
     } else if (back[j] == 156) {
+      
       //Transaction Type
       pdolLengths += back[j + 1];
+      
     } else if (back[j] == 159 && back[j + 1] == 78) {
+      
       //Merchant Name and Location
       pdolLengths += back[j + 2];
+      
     } else if (back[j] == 159 && back[j + 1] == 26) {
+      
       //Terminal Country Code
       pdolLengths += back[j + 2];
+      
     }
   }
+  
   return pdolLengths;
 
 }
 
+/*
+ * @Description: Write to EEPROM:
+ * 
+ */
+
+void writeEEPROM(uint8_t arr[], uint8_t count){
+   uint8_t i = 0;
+   uint8_t buff[8];
+   Serial.println("Writing to EEPROM...");
+   for (i = 0; i < count; ++i) { EEPROM.write(i, arr[i]); }
+
+   for (i = 0; i < count; ++i) { buff[i]=EEPROM.read(i); }
+
+   Serial.println("Saving your credit card...");
+   Serial.println("Your saved Card Number: ");
+   for (i = 0; i < count; ++i) { Serial.print(buff[i],HEX); }
+   
+  
+}
+
+/*
+ * @Description: Read from EEPROM and then compare the card numbers
+ * @Parameter: 
+ * 
+ */
+
+ void readEEPROMAndCompare(uint8_t arr[] , uint8_t count){
+    uint8_t i = 0;
+    uint8_t buff[8];
+    bool matched = false;
+    
+    Serial.println("Reading from EEPROM...");
+    for (i = 0; i < count; ++i) { buff[i]=EEPROM.read(i); }
+    Serial.println("Your saved Card Number: ");
+    for (i = 0; i < count; ++i) { Serial.print(buff[i],HEX); }
+
+    matched = compareCardNumber(buff,sizeof(buff), arr, count);
+
+    if(matched==true){
+      
+        //unlock();
+        Serial.println("Unlocking Door... ");
+        delay(3000);
+        Serial.println("Read card again...");
+        
+    }else{
+        
+       Serial.println("Your card does not match--- Please try again with another card----");
+        
+    } 
+
+   
+ }
 
