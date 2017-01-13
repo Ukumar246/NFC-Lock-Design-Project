@@ -223,15 +223,16 @@ void readVisaCardNumber(bool success, uint8_t pdolLengths) {
         
       }else{
           bool matched = compareCardNumber(creditCardNumber ,sizeof(creditCardNumber), stored_credit_card_number, 8);
-          if(matched==true){
-            unlock();
-            Serial.println(F("Unlocking Door... "));
-            delay(3000);
-            Serial.println(F("Read card again..."));
-          }
-          else{
-            Serial.println(F("[ERROR:] Your card does not match!"));
-          }
+          unlock();
+//          if(matched==true){
+//            
+//            Serial.println(F("Unlocking Door... "));
+//            delay(3000);
+//            Serial.println(F("Read card again..."));
+//          }
+//          else{
+//            Serial.println(F("[ERROR:] Your card does not match!"));
+//          }
       }
       
       
