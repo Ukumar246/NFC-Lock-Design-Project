@@ -1,61 +1,70 @@
-
+#include <stdint.h>
+#include <stdbool.h>
 #include "NFC_Lock_APDU.h"
-#include <EEPROM.h>
 bool programming_mode = true;
+uint8_t stored_credit_card_number[8];
+
 /*
  * Setup the pin for the PN_532
  */
 Adafruit_PN532 nfc(PN532_SS);
 
-/*
- * PN_532 set up
- */
+void printPN53xInfo(uint32_t versiondata){
+  Serial.print("Found chip PN5"); 
+  Serial.println((versiondata >> 24) & 0xFF, HEX); 
+  Serial.print("Firmware ver. "); 
+  Serial.print((versiondata >> 16) & 0xFF, DEC); 
+  Serial.print('.'); 
+  Serial.println((versiondata >> 8) & 0xFF, DEC);
+  return;
+}
  
 void setup(void) {
-#ifndef ESP8266
-  while (!Serial);
-#endif
+  #ifndef ESP8266
+    while (!Serial);
+  #endif
+  
+  //Wait for computer
+  while(!Serial);
 
   Serial.begin(115200);
-  Serial.println("Looking for PN532...");
+  Serial.println(F("Looking for PN532..."));
   nfc.begin();
-  EEPROM.begin(512);
+
+  clearEEPROM();
+//  EEPROM.begin(256);
 
   uint32_t versiondata = nfc.getFirmwareVersion();
-  if (! versiondata) {
-    
-    Serial.print("Didn't find PN53x board");
+  if (! versiondata) {    
+    Serial.print(F("[SPI ERROR]: Didn't find PN53x board"));
     while (1); // halt
-    
   }
-  
-  //Serial.print("Found chip PN5"); Serial.println((versiondata >> 24) & 0xFF, HEX); Serial.print("Firmware ver. "); Serial.print((versiondata >> 16) & 0xFF, DEC); Serial.print('.'); Serial.println((versiondata >> 8) & 0xFF, DEC);
+
+  //Print board info
+  printPN53xInfo(versiondata);
   
   // configure board to read RFID tags
   nfc.SAMConfig();
-  Serial.println("Waiting for an ISO14443A card..");
-  
-//
-//  if (!lockHWSetup())
-//  {
-//     Serial.println("Lock HW Setup Failed!");
-//     while(!lockHWSetup());
-//  }
+  Serial.println(F("Waiting for an NFC card ..."));
+ 
+  if (!lockHWSetup()){
+     Serial.println(F("Lock HW Setup Failed!"));
+     while(!lockHWSetup());
+  }
 
-  Serial.println("Ready...");
+  Serial.println(F("Ready."));
 }
 
 void loop(void) {
 
   if (programming_mode==true){
-    Serial.println("Operating in programming mode---Please tap your card to SAVE data---");
-  }else if (programming_mode == false){
-     Serial.println("Operating in use mode---Please tap your card to UNLOCK door---");
+      Serial.println(F("Please tap your card to SAVE data."));
+  }
+  else{
+      Serial.println(F("Please tap your card to UNLOCK door."));
   }
 
   readCreditCard();
- 
- 
 }
 
 /*
@@ -71,7 +80,7 @@ void readCreditCard(){
   success = nfc.inListPassiveTarget();
   if (success) {
     uint8_t response[255];
-    uint8_t responseLength = sizeof(response);
+    uint8_t responseLength = 255;
 
     success = nfc.inDataExchange(selectApdu, sizeof(selectApdu), response, &responseLength);
 
@@ -91,44 +100,61 @@ void readCreditCard(){
           
         } else {
           
-          Serial.println("Could not send second header---Please hold card for longer-------");
+          Serial.println(F("Could not send second header---Please hold card for longer-------"));
           
         }
       
     }
     else {
       
-      Serial.println("Could not read the first response from the card----- Hold card again!------");
+      Serial.println(F("Could not read the first response from the card----- Hold card again!------"));
       delay(200);
       
     }
   
   }
 }
-//bool lockHWSetup()
-//{
-//  pinMode(MOTOR1, OUTPUT);
-//  pinMode(MOTOR2, OUTPUT);
-//
-//  // Turn off the motor
-//  digitalWrite(MOTOR1, LOW); // set pin 2 on L293D low
-//  digitalWrite(MOTOR2, LOW); // set pin 7 on L293D high
-//  
-//  return true;
-//}
 
-//bool unlock(){
-//  Serial.println("[status]: Unlocking door...");
-//  digitalWrite(MOTOR1, LOW); // set pin 2 on L293D low
-//  digitalWrite(MOTOR2, HIGH); // set pin 7 on L293D high
-// 
-//  delay(500);   //1sec
-//
-//  // Turn off the motor
-//  digitalWrite(MOTOR1, LOW); // set pin 2 on L293D low
-//  digitalWrite(MOTOR2, LOW); // set pin 7 on L293D high
-//  return true;
-//}
+bool lockHWSetup()
+{
+  // Motor Pins
+  pinMode(MOTOR1, OUTPUT);
+  pinMode(MOTOR2, OUTPUT);
+
+  // Motor Switch Control Pins
+  pinMode(MOTORSW_LOCK, INPUT);
+  pinMode(MOTORSW_UNLOCK, INPUT);
+
+  // Turn off the motor
+  digitalWrite(MOTOR1, LOW); // set pin 2 on L293D low
+  digitalWrite(MOTOR2, LOW); // set pin 7 on L293D high
+  
+  return true;
+}
+
+bool unlock(){
+  Serial.println(F("[status]: Unlocking door..."));
+  // Spin motor CW <-> CCW
+  digitalWrite(MOTOR1, LOW);  // set pin 2 on L293D low
+  digitalWrite(MOTOR2, HIGH); // set pin 7 on L293D high
+ 
+  //read the unlock button here and then decide on it
+  bool  unlockSWState = digitalRead(MOTORSW_UNLOCK);
+
+  while(true){
+      unlockSWState = digitalRead(MOTORSW_UNLOCK);
+      if (unlockSWState == LOW){
+          delay(500);
+          break;
+      }
+  }
+  // Turn off the motor
+  digitalWrite(MOTOR1, LOW); // set pin 2 on L293D low
+  digitalWrite(MOTOR2, LOW); // set pin 7 on L293D high
+  
+
+  return true;
+}
 
 /*
  * @Description: Can only process VISA cards as it sends the required information over.
@@ -142,21 +168,18 @@ void readVisaCardNumber(bool success, uint8_t pdolLengths) {
     uint8_t length = 255;
 
     if (pdolLengths <= 16) {
-      
       //normal credit cards (wallet)
       success = nfc.inDataExchange(requestCardNumber, sizeof(requestCardNumber), userInfo, &length);
       
-    } else {
-      
+    } else {      
       //apple pay:  which requires more payment options info
       success = nfc.inDataExchange(requestApplePayAccount, sizeof(requestApplePayAccount), userInfo, &length);
-      
     }
 
     //This reponse has the user information: credit card number etc.
     if (success) {
       
-      Serial.print("3rd Round (User information): ");
+      Serial.print(F("3rd Round (User information): "));
       nfc.PrintHexChar(userInfo, length);
 
       uint8_t i = 0;
@@ -167,11 +190,11 @@ void readVisaCardNumber(bool success, uint8_t pdolLengths) {
         if (responseDigit == 209 || responseDigit == 210) {
         
           //Found D1 (End of credit card track): Now loop back 8 sections of the array to get the 8 bytes of the credit card number
-          Serial.println("Found D1 : "); Serial.println(responseDigit, HEX);
+          Serial.println(F("Found D1 : ")); Serial.println(responseDigit, HEX);
           
           uint8_t j = i;
           uint8_t k = 0;
-          //Serial.print("You Credit Card Number: ");
+          
           for (j = j - 8, k = 0; j < i; j++, k++) {
         
             //size of credit card cannot be more than 8 bytes
@@ -181,35 +204,40 @@ void readVisaCardNumber(bool success, uint8_t pdolLengths) {
               creditCardNumber[k] = userInfo[j];
               
             } else {
-              
-              Serial.println("[Panic]: Size of credit card number more than 8 bytes>");
-              
+              Serial.println(F("[Panic]: Size of credit card number more than 8 bytes>"));
             }
           }
-
         }
-
      }
 
-      Serial.println("Credit Card Number Stored: ");
+      Serial.println(F("Credit Card Number Stored: "));
       printArray(creditCardNumber,sizeof(creditCardNumber));
 
       if (programming_mode){
 
         //save the card number to EEPROM.
-        writeEEPROM(creditCardNumber,sizeof(creditCardNumber));
+        //writeEEPROM(creditCardNumber,sizeof(creditCardNumber));
+        memcpy(stored_credit_card_number, creditCardNumber, 8 * sizeof(uint8_t));
+        
         programming_mode=false;
         
       }else{
-
-          readEEPROMAndCompare(creditCardNumber,sizeof(creditCardNumber));
-          
+          bool matched = compareCardNumber(creditCardNumber ,sizeof(creditCardNumber), stored_credit_card_number, 8);
+          if(matched==true){
+            unlock();
+            Serial.println(F("Unlocking Door... "));
+            delay(3000);
+            Serial.println(F("Read card again..."));
+          }
+          else{
+            Serial.println(F("[ERROR:] Your card does not match!"));
+          }
       }
       
       
     }
     else {
-      Serial.println("Broken connection--Third and final response was not recieved correctly---Failed to read Credit Card");
+      Serial.println(F("Broken connection--Third and final response was not recieved correctly---Failed to read Credit Card"));
     }
  
 }
@@ -227,7 +255,7 @@ void printArray(uint8_t array[], uint8_t count) {
   for (i = 0; i < count; i++) {
     Serial.print(array[i], HEX);
   }
-  Serial.print("\n");
+  Serial.print(F("\n"));
 }
 
 bool compareCardNumber(uint8_t *firstCard, uint8_t firstCardLength, uint8_t *secondCard, uint8_t secondCardLength) {
@@ -247,14 +275,13 @@ bool compareCardNumber(uint8_t *firstCard, uint8_t firstCardLength, uint8_t *sec
     }
   }
 
-  Serial.println("Comparator --- Your saved Card Number Was: ");
+  Serial.println(F("Comparator --- Your saved Card Number Was: "));
   for (i = 0; i < firstCardLength; ++i) { Serial.print(firstCard[i],HEX); }
-  Serial.println("Comparator --- Your tapped card number was: ");
+  Serial.println(F("Comparator --- Your tapped card number was: "));
   for (i = 0; i < secondCardLength; ++i) { Serial.print(secondCard[i],HEX); }
   
   //once past the for loop you know that all digits are the same and cards match
   return true;
-
 }
 
 
@@ -267,7 +294,7 @@ bool compareCardNumber(uint8_t *firstCard, uint8_t firstCardLength, uint8_t *sec
 uint8_t totalPdolLengths (uint8_t back[], uint8_t count) {
   uint8_t pdolLengths = 0;
 
-  Serial.print("2nd Round: "); Serial.println(count);
+  Serial.print(F("2nd Round: ")); Serial.println(count);
   //printArray(back);
   uint8_t j = 0;
   for (j = 0; j < count; j++) {
@@ -277,7 +304,7 @@ uint8_t totalPdolLengths (uint8_t back[], uint8_t count) {
       
       //found the PDOL start
       uint8_t pdolLength = back[j + 2];
-      Serial.print("found the PDOL section: "); Serial.println(pdolLength, HEX);
+      Serial.print(F("found the PDOL section: ")); Serial.println(pdolLength, HEX);
       
     } else if (back[j] == 159 && back[j + 1] == 102) {
       
@@ -328,7 +355,6 @@ uint8_t totalPdolLengths (uint8_t back[], uint8_t count) {
   }
   
   return pdolLengths;
-
 }
 
 /*
@@ -339,16 +365,24 @@ uint8_t totalPdolLengths (uint8_t back[], uint8_t count) {
 void writeEEPROM(uint8_t arr[], uint8_t count){
    uint8_t i = 0;
    uint8_t buff[8];
-   Serial.println("Writing to EEPROM...");
+   Serial.println(F("Writing to EEPROM..."));
    for (i = 0; i < count; ++i) { EEPROM.write(i, arr[i]); }
 
    for (i = 0; i < count; ++i) { buff[i]=EEPROM.read(i); }
 
-   Serial.println("Saving your credit card...");
+   Serial.println(F("Saving your credit card..."));
    Serial.println("Your saved Card Number: ");
    for (i = 0; i < count; ++i) { Serial.print(buff[i],HEX); }
-   
-  
+
+   Serial.println(F("EEPROM Write Finished!"));
+}
+
+void clearEEPROM()
+{
+  for (int i = 0 ; i < EEPROM.length() ; i++) {
+    EEPROM.write(i, 0);
+  }
+  return;
 }
 
 /*
@@ -362,26 +396,24 @@ void writeEEPROM(uint8_t arr[], uint8_t count){
     uint8_t buff[8];
     bool matched = false;
     
-    Serial.println("Reading from EEPROM...");
+    Serial.println(F("Reading from EEPROM..."));
     for (i = 0; i < count; ++i) { buff[i]=EEPROM.read(i); }
-    Serial.println("Your saved Card Number: ");
+    Serial.println(F("Your saved Card Number: "));
     for (i = 0; i < count; ++i) { Serial.print(buff[i],HEX); }
 
     matched = compareCardNumber(buff,sizeof(buff), arr, count);
 
     if(matched==true){
       
-        //unlock();
-        Serial.println("Unlocking Door... ");
+        unlock();
+        Serial.println(F("Unlocking Door... "));
         delay(3000);
-        Serial.println("Read card again...");
+        Serial.println(F("Read card again..."));
         
     }else{
         
-       Serial.println("Your card does not match--- Please try again with another card----");
+       Serial.println(F("Your card does not match--- Please try again with another card----"));
         
-    } 
-
-   
+    }  
  }
 

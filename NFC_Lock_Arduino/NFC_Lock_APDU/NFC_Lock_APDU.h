@@ -1,12 +1,14 @@
-#include <ESP8266WiFi.h>
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_PN532.h>
+#include <EEPROM.h>
 
 // Constructor for PN532
-#define PN532_SS   (15)
-#define MOTOR1 (0)
-#define MOTOR2 (5)
+#define PN532_SS   (8)
+#define MOTOR1 (9)
+#define MOTOR2 (10)
+#define MOTORSW_LOCK (4)
+#define MOTORSW_UNLOCK (3)    // THIS is the Unlock Switch 
 
 
 #define BLOCK_LIMIT (3)
