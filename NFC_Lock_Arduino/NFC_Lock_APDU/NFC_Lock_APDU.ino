@@ -31,7 +31,7 @@ void setup(void) {
   Serial.println(F("Looking for PN532..."));
   nfc.begin();
 
-  clearEEPROM();
+//  clearEEPROM();
 //  EEPROM.begin(256);
 
   uint32_t versiondata = nfc.getFirmwareVersion();
@@ -61,7 +61,7 @@ void loop(void) {
       Serial.println(F("Please tap your card to SAVE data."));
   }
   else{
-      Serial.println(F("Please tap your card to UNLOCK door."));
+      //Serial.println(F("Please tap your card to UNLOCK door."));
   }
 
   readCreditCard();
@@ -161,9 +161,7 @@ bool unlock(){
  */
 
 void readVisaCardNumber(bool success, uint8_t pdolLengths) {
-
-  uint8_t creditCardNumber[8];
-
+    uint8_t creditCardNumber[8];
     uint8_t userInfo[255];
     uint8_t length = 255;
 
@@ -178,7 +176,6 @@ void readVisaCardNumber(bool success, uint8_t pdolLengths) {
 
     //This reponse has the user information: credit card number etc.
     if (success) {
-      
       Serial.print(F("3rd Round (User information): "));
       nfc.PrintHexChar(userInfo, length);
 
@@ -196,13 +193,10 @@ void readVisaCardNumber(bool success, uint8_t pdolLengths) {
           uint8_t k = 0;
           
           for (j = j - 8, k = 0; j < i; j++, k++) {
-        
             //size of credit card cannot be more than 8 bytes
             if (k < 8) {
-              
               //store the decoded credit card number into the credit card array
               creditCardNumber[k] = userInfo[j];
-              
             } else {
               Serial.println(F("[Panic]: Size of credit card number more than 8 bytes>"));
             }
@@ -212,30 +206,24 @@ void readVisaCardNumber(bool success, uint8_t pdolLengths) {
 
       Serial.println(F("Credit Card Number Stored: "));
       printArray(creditCardNumber,sizeof(creditCardNumber));
-
+      
+      /*
       if (programming_mode){
 
         //save the card number to EEPROM.
         //writeEEPROM(creditCardNumber,sizeof(creditCardNumber));
         memcpy(stored_credit_card_number, creditCardNumber, 8 * sizeof(uint8_t));
-        
         programming_mode=false;
-        
       }else{
           bool matched = compareCardNumber(creditCardNumber ,sizeof(creditCardNumber), stored_credit_card_number, 8);
-          unlock();
-//          if(matched==true){
-//            
-//            Serial.println(F("Unlocking Door... "));
-//            delay(3000);
-//            Serial.println(F("Read card again..."));
-//          }
-//          else{
-//            Serial.println(F("[ERROR:] Your card does not match!"));
-//          }
+          if(matched){
+            // Unlock Door here
+          }
+          else{
+            Serial.println(F("[ERROR:] Your card does not match!"));
+          }
       }
-      
-      
+      */
     }
     else {
       Serial.println(F("Broken connection--Third and final response was not recieved correctly---Failed to read Credit Card"));
@@ -362,7 +350,7 @@ uint8_t totalPdolLengths (uint8_t back[], uint8_t count) {
  * @Description: Write to EEPROM:
  * 
  */
-
+/*
 void writeEEPROM(uint8_t arr[], uint8_t count){
    uint8_t i = 0;
    uint8_t buff[8];
@@ -385,13 +373,14 @@ void clearEEPROM()
   }
   return;
 }
+*/
 
 /*
  * @Description: Read from EEPROM and then compare the card numbers
  * @Parameter: 
  * 
  */
-
+/*
  void readEEPROMAndCompare(uint8_t arr[] , uint8_t count){
     uint8_t i = 0;
     uint8_t buff[8];
@@ -417,4 +406,4 @@ void clearEEPROM()
         
     }  
  }
-
+*/
