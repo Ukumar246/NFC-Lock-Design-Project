@@ -1,3 +1,6 @@
+// Main source code for Arduino NFC Locks
+// Arduino Due
+
 #include "NFC_Lock_master.h"
 #if defined(ARDUINO_SAM_DUE)
   //Due specific code
