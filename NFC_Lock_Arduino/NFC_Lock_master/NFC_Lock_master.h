@@ -1,10 +1,10 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_PN532.h>
-#include <EEPROM.h>
+//#include <EEPROM.h>
 
 // Constructor for PN532
-#define PN532_SS   (8)
+#define PN532_SS   (10)
 #define MOTOR1 (9)
 #define MOTOR2 (10)
 #define MOTORSW_LOCK (4)
