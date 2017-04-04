@@ -5,7 +5,7 @@
 #if defined(ARDUINO_SAM_DUE)
   //Due specific code
 #else
-  #error Unsupported hardware
+  #warning Unsupported hardware
   //#include <EEPROM.h>
 #endif
 
@@ -13,8 +13,9 @@
 #define SETUPDEBUG
 #define NFCDEBUG
 // If using Native Port on Arduino Zero or Due define as NFCPRINTUSB
-#define NFCPRINT Serial
-//#define NFCPRINT SerialUSB   // < This is for Native Port
+//#define NFCPRINT Serial;
+#define NFCPRINT Console;    // When using YUN Shield
+//#define NFCPRINT SerialUSB;   // < This is for Native Port
 bool programming_mode = true;
 
 /// Setup the pin for the PN_532
@@ -175,7 +176,7 @@ void readVisaCardNumber(bool success, uint8_t pdolLengths) {
                 //Found D1 (End of credit card track): Now loop back 8 sections of the array to get the 8 bytes of the credit card number
                 #ifdef NFCDEBUG
                     NFCPRINT.println("Found D1 : "); 
-                    Serial.println(responseDigit, HEX);
+                    NFCPRINT.println(responseDigit, HEX);
                 #endif
               
                 uint8_t j = i;

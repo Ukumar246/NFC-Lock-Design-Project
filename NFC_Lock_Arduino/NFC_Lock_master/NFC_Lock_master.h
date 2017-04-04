@@ -10,15 +10,8 @@
 #define MOTOR2 (10)
 #define MOTORSW_LOCK (4)
 #define MOTORSW_UNLOCK (3)    // THIS is the Unlock Switch 
-
-
 #define BLOCK_LIMIT (3)
-#if defined(ARDUINO_ARCH_SAMD)
-// for Zero, output on USB Serial console, remove line below if using programming port to program the Zero!
-// also change #define in Adafruit_PN532.cpp library file
 
-#define Serial SerialUSB
-#endif
 //for selecting the first request
 uint8_t selectApdu[] =  {
   0x00, /* CLA */
